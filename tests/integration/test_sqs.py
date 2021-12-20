@@ -494,7 +494,7 @@ class TestSqsProvider:
             sqs_create_queue(QueueName=queue_name, Attributes=attributes)
         e.match("InvalidParameterValue")
 
-    @pytest.mark.skipIf(
+    @pytest.mark.skipif(
         os.environ.get("PROVIDER_OVERRIDE_SQS") != "custom",
         reason="New provider test which isn't covered by old one",
     )
