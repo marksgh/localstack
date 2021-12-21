@@ -190,7 +190,7 @@ docker-run-tests:		  ## Initializes the test environment and runs the tests in a
 	# Remove argparse and dataclasses to fix https://github.com/pytest-dev/pytest/issues/5594
 	docker run --entrypoint= -v `pwd`/tests/:/opt/code/localstack/tests/ -v `pwd`/target/:/opt/code/localstack/target/ \
 		$(IMAGE_NAME_FULL) \
-	    bash -c "make install-test && make init-testlibs && pip uninstall -y argparse dataclasses && DEBUG=$(DEBUG) PROVIDER_OVERRIDE_SQS=custom LAMBDA_EXECUTOR=local PYTEST_LOGLEVEL=debug PYTEST_ARGS='$(PYTEST_ARGS)' COVERAGE_FILE='$(COVERAGE_FILE)' TEST_PATH='$(TEST_PATH)' make test-coverage"
+	    bash -c "make install-test && make init-testlibs && pip uninstall -y argparse dataclasses && DEBUG=$(DEBUG) LAMBDA_EXECUTOR=local PYTEST_LOGLEVEL=debug PYTEST_ARGS='$(PYTEST_ARGS)' COVERAGE_FILE='$(COVERAGE_FILE)' TEST_PATH='$(TEST_PATH)' make test-coverage"
 
 docker-run:        		  ## Run Docker image locally
 	($(VENV_RUN); bin/localstack start)
@@ -214,7 +214,6 @@ test:              		  ## Run automated tests
 test-coverage:     		  ## Run automated tests and create coverage report
 	($(VENV_RUN); python -m coverage --version; \
 		DEBUG=$(DEBUG) \
-		PROVIDER_OVERRIDE_SQS="custom" \
 		python -m coverage run $(COVERAGE_ARGS) -m \
 		pytest --durations=10 --log-cli-level=$(PYTEST_LOGLEVEL) -s $(PYTEST_ARGS) $(TEST_PATH))
 

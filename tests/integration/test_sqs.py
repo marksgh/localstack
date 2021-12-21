@@ -347,6 +347,7 @@ class TestSqsProvider:
         response_receive = sqs_client.receive_message(QueueUrl=queue_url)
         assert response_receive["Messages"][0]["MessageId"] == response_send["MessageId"]
 
+    @pytest.mark.xfail
     def test_batch_send_with_invalid_char_should_succeed(self, sqs_client, sqs_create_queue):
         # issue 4135
         queue_name = "queue_4135_" + short_uid()
@@ -504,6 +505,7 @@ class TestSqsProvider:
             sqs_create_queue(QueueName=queue_name)
         e.match("InvalidParameterValue")
 
+    @pytest.mark.xfail
     def test_redrive_policy_attribute_validity(self, sqs_create_queue, sqs_client):
         dl_queue_name = f"dl-queue-{short_uid()}"
         dl_queue_url = sqs_create_queue(QueueName=dl_queue_name)
@@ -654,6 +656,7 @@ class TestSqsProvider:
         )
         assert receive_result["Messages"][0]["MessageAttributes"] == attributes
 
+    @pytest.mark.xfail
     def test_send_message_with_invalid_string_attributes(self, sqs_client, sqs_create_queue):
         queue_name = f"queue-{short_uid()}"
         queue_url = sqs_create_queue(QueueName=queue_name)
@@ -720,6 +723,7 @@ class TestSqsProvider:
         invalid_attribute = {f"{ends_with_dot}": {"StringValue": "Valid", "DataType": "String"}}
         send_invalid(invalid_attribute)
 
+    @pytest.mark.xfail
     def test_send_message_with_invalid_fifo_parameters(self, sqs_client, sqs_create_queue):
         fifo_queue_name = f"queue-{short_uid()}.fifo"
         queue_url = sqs_create_queue(
@@ -903,6 +907,7 @@ class TestSqsProvider:
         assert constructed_arn == get_single_attribute.get("Attributes").get("QueueArn")
         assert max_receive_count == redrive_policy.get("maxReceiveCount")
 
+    @pytest.mark.xfail
     def test_set_unsupported_attribute_fifo(self, sqs_client, sqs_create_queue):
         # TODO: behaviour diverges from AWS
         queue_name = f"queue-{short_uid()}"
@@ -960,11 +965,7 @@ class TestSqsProvider:
         e.match("InvalidParameterValue")
 
     # FIXME: make this testcase work against the new provider
-    @pytest.mark.skipif(
-        os.environ.get("TEST_TARGET") == "AWS_CLOUD"
-        or os.environ.get("PROVIDER_OVERRIDE_SQS") == "custom",
-        reason="Provider ist not yet compatible",
-    )
+    @pytest.mark.xfail
     def test_post_list_queues_with_auth_in_presigned_url(self):
         # TODO: does not work when testing against AWS
         method = "post"
@@ -1006,11 +1007,7 @@ class TestSqsProvider:
         assert b"<ListQueuesResponse" in response.content
 
     # FIXME: make this testcase work against the new provider
-    @pytest.mark.skipif(
-        os.environ.get("TEST_TARGET") == "AWS_CLOUD"
-        or os.environ.get("PROVIDER_OVERRIDE_SQS") == "custom",
-        reason="Provider ist not yet compatible",
-    )
+    @pytest.mark.xfail
     def test_get_list_queues_with_auth_in_presigned_url(self):
         # TODO: does not work when testing against AWS
         method = "get"
@@ -1051,6 +1048,7 @@ class TestSqsProvider:
         assert response.status_code == 200
         assert b"<ListQueuesResponse" in response.content
 
+    @pytest.mark.xfail
     def test_system_attributes_have_no_effect_on_attr_md5(self, sqs_create_queue, sqs_client):
         queue_name = f"queue-{short_uid()}"
         queue_url = sqs_create_queue(QueueName=queue_name)
@@ -1100,6 +1098,7 @@ class TestSqsProvider:
 
         assert result_receive1["Messages"][0]["Body"] == result_receive2["Messages"][0]["Body"]
 
+    @pytest.mark.xfail
     def test_sequence_number(self, sqs_client, sqs_create_queue):
         fifo_queue_name = f"queue-{short_uid()}.fifo"
         fifo_queue_url = sqs_create_queue(
@@ -1123,6 +1122,7 @@ class TestSqsProvider:
         assert "SequenceNumber" not in send_result
 
     # Tests of diverging behaviour that was discovered during rewrite
+    @pytest.mark.xfail
     def test_posting_to_fifo_requires_deduplicationid_group_id(self, sqs_client, sqs_create_queue):
         fifo_queue_name = f"queue-{short_uid()}.fifo"
         queue_url = sqs_create_queue(QueueName=fifo_queue_name, Attributes={"FifoQueue": "true"})
@@ -1146,6 +1146,7 @@ class TestSqsProvider:
     def test_approximate_number_of_messages_delayed(self):
         pass
 
+    @pytest.mark.xfail
     def test_posting_to_queue_via_queue_name(self, sqs_client, sqs_create_queue):
         # TODO: behaviour diverges from AWS
         queue_name = f"queue-{short_uid()}"
@@ -1157,6 +1158,7 @@ class TestSqsProvider:
         assert result_send["MD5OfMessageBody"] == "86a83f96652a1bfad3891e7d523750cb"
         assert result_send["ResponseMetadata"]["HTTPStatusCode"] == 200
 
+    @pytest.mark.xfail
     def test_invalid_string_attributes_cause_invalid_parameter_value_error(
         self, sqs_client, sqs_create_queue
     ):
