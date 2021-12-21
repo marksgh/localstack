@@ -1026,6 +1026,28 @@ class TestSqsProvider:
 
         assert result_receive1["Messages"][0]["Body"] == result_receive2["Messages"][0]["Body"]
 
+    def test_sequence_number(self, sqs_client, sqs_create_queue):
+        fifo_queue_name = f"queue-{short_uid()}.fifo"
+        fifo_queue_url = sqs_create_queue(
+            QueueName=fifo_queue_name, Attributes={"FifoQueue": "true"}
+        )
+        message_content = f"test{short_uid()}"
+        dedup_id = f"fifo_dedup-{short_uid()}"
+        group_id = f"fifo_group-{short_uid()}"
+
+        send_result_fifo = sqs_client.send_message(
+            QueueUrl=fifo_queue_url,
+            MessageBody=message_content,
+            MessageGroupId=group_id,
+            MessageDeduplicationId=dedup_id,
+        )
+        assert "SequenceNumber" in send_result_fifo.keys()
+
+        queue_name = f"queue-{short_uid()}"
+        queue_url = sqs_create_queue(QueueName=queue_name)
+        send_result = sqs_client.send_message(QueueUrl=queue_url, MessageBody=message_content)
+        assert "SequenceNumber" not in send_result
+
     # Tests of diverging behaviour that was discovered during rewrite
     def test_posting_to_fifo_requires_deduplicationid_group_id(self, sqs_client, sqs_create_queue):
         fifo_queue_name = f"queue-{short_uid()}.fifo"

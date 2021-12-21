@@ -419,6 +419,9 @@ class SqsQueue:
             if k not in valid:
                 raise InvalidAttributeName("Unknown attribute name %s" % k)
 
+    def generate_sequence_number(self):
+        return None
+
 
 class StandardQueue(SqsQueue):
     def put(
@@ -528,6 +531,11 @@ class FifoQueue(SqsQueue):
             raise InvalidAttributeValue(
                 "Invalid value for the parameter FifoQueue. Reason: Modifying queue type is not supported."
             )
+
+    # TODO: If we ever actually need to do something with this number, it needs to be part of
+    #   SQSMessage. This means changing all *put*() signatures to return the saved message.
+    def generate_sequence_number(self):
+        return _create_mock_sequence_number()
 
 
 class InflightUpdateWorker:
@@ -808,7 +816,7 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
             MessageId=message["MessageId"],
             MD5OfMessageBody=message["MD5OfBody"],
             MD5OfMessageAttributes=message.get("MD5OfMessageAttributes"),
-            SequenceNumber=_create_mock_sequence_number(),
+            SequenceNumber=queue.generate_sequence_number(),
             MD5OfMessageSystemAttributes=_create_message_attribute_hash(message_system_attributes),
         )
 
@@ -846,7 +854,7 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
                             MD5OfMessageSystemAttributes=_create_message_attribute_hash(
                                 message.get("message_system_attributes")
                             ),
-                            SequenceNumber=_create_mock_sequence_number(),
+                            SequenceNumber=queue.generate_sequence_number(),
                         )
                     )
                 except Exception as e:
