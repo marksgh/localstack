@@ -325,7 +325,7 @@ class SqsQueue:
                 "deleting message %s from queue %s", standard_message.message["MessageId"], self.arn
             )
 
-            # remove all all handles
+            # remove all handles
             for handle in standard_message.receipt_handles:
                 del self.receipts[handle]
             standard_message.receipt_handles.clear()
@@ -394,15 +394,15 @@ class SqsQueue:
 
         with self.mutex:
             messages = list(self.inflight)
-            for stanard_message in messages:
-                if stanard_message.is_visible:
+            for standard_message in messages:
+                if standard_message.is_visible:
                     LOG.debug(
                         "re-queueing inflight messages %s into queue %s",
-                        stanard_message.message["MessageId"],
+                        standard_message.message["MessageId"],
                         self.arn,
                     )
-                    self.inflight.remove(stanard_message)
-                    self.visible.put_nowait(stanard_message)
+                    self.inflight.remove(standard_message)
+                    self.visible.put_nowait(standard_message)
 
     def _assert_queue_name(self, name):
         # TODO: slashes are actually not allowed, but we've allowed it explicitly in localstack
@@ -417,7 +417,7 @@ class SqsQueue:
 
         for k in attributes.keys():
             if k not in valid:
-                raise InvalidAttributeName("Unknown attribute name %s" % k)
+                raise InvalidAttributeName(f"Unknown attribute name {k}")
 
     def generate_sequence_number(self):
         return None
@@ -525,7 +525,7 @@ class FifoQueue(SqsQueue):
 
         for k in attributes.keys():
             if k not in valid:
-                raise InvalidAttributeName("Unknown attribute name %s" % k)
+                raise InvalidAttributeName(f"Unknown attribute name {k}")
         # Special Cases
         if attributes.get(QueueAttributeName.FifoQueue).lower() != "true":
             raise InvalidAttributeValue(
@@ -778,7 +778,7 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
             try:
                 getattr(QueueAttributeName, attr)
             except AttributeError:
-                raise InvalidAttributeName("Unknown attribute %s." % attr)
+                raise InvalidAttributeName(f"Unknown attribute {attr}.")
 
             if callable(queue.attributes.get(attr)):
                 func = queue.attributes.get(attr)
@@ -1089,7 +1089,7 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
                 valid_count = False
             if not valid_count:
                 raise InvalidParameterValue(
-                    f"Value{redrive_policy} for parameter RedrivePolicy is invalid. Reason: Invalid value for maxReceiveCount: {max_receive_count}, valid values are from 1 to 1000 both inclusive."
+                    f"Value {redrive_policy} for parameter RedrivePolicy is invalid. Reason: Invalid value for maxReceiveCount: {max_receive_count}, valid values are from 1 to 1000 both inclusive."
                 )
 
     def tag_queue(self, context: RequestContext, queue_url: String, tags: TagMap) -> None:
@@ -1136,13 +1136,9 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
         queue = self._require_queue_by_url(queue_url)
         self._assert_permission(context, queue)
 
-        candidate = None
-        for perm in queue.permissions:
-            if perm.label == label:
-                candidate = perm
-                break
-        if candidate:
-            queue.permissions.remove(candidate)
+        candidates = [p for p in queue.permissions if p.label == label]
+        if candidates:
+            queue.permissions.remove(candidates[0])
 
     def _create_message_attributes(
         self,
