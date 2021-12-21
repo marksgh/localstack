@@ -72,6 +72,13 @@ LOG = logging.getLogger(__name__)
 # https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html
 MSG_CONTENT_REGEX = "^[\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\U00010000-\U0010FFFF]*$"
 
+# https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-message-metadata.html
+# While not documented, umlauts seem to be allowed
+ATTR_NAME_CHAR_REGEX = "^[\u00C0-\u017Fa-zA-Z0-9_.-]*$"
+ATTR_NAME_PREFIX_SUFFIX_REGEX = r"^(?!(aws\.|amazon\.|\.)).*(?<!\.)$"
+ATTR_TYPE_REGEX = "^(String|Number|Binary).*$"
+FIFO_MSG_REGEX = "^[0-9a-zA-z!\"#$%&'()*+,./:;<=>?@[\\]^_`{|}~-]*$"
+
 DEDUPLICATION_INTERVAL_IN_SEC = 5 * 60
 
 
@@ -126,18 +133,11 @@ def assert_queue_name(queue_name: str, fifo: bool = False):
         )
 
 
-def check_message_content(data: dict):
+def check_message_content(message_body: str):
     error = "Invalid characters found. Valid unicode characters are #x9 | #xA | #xD | #x20 to #xD7FF | #xE000 to #xFFFD | #x10000 to #x10FFFF"
-    for key, value in data.items():
-        if isinstance(value, dict):
-            check_message_content(value)
-        string_value = str(value)
-        if not re.match(MSG_CONTENT_REGEX, string_value):
-            # TODO: Standard message attributes like QueueAttributeName.name?
-            if key == "message_body" or key == "MessageBody":
-                raise InvalidMessageContents(error)
-            else:
-                raise InvalidParameterValue(error)
+
+    if not re.match(MSG_CONTENT_REGEX, message_body):
+        raise InvalidMessageContents(error)
 
 
 class QueueKey(NamedTuple):
@@ -577,18 +577,70 @@ class InflightUpdateWorker:
                 queue.requeue_inflight_messages()
 
 
+def check_attributes(message_attributes: MessageBodyAttributeMap):
+    if not message_attributes:
+        return
+    for attribute_name in message_attributes:
+        if len(attribute_name) >= 256:
+            raise InvalidParameterValue(
+                "Message (user) attribute names must be shorter than 256 Bytes"
+            )
+        if not re.match(ATTR_NAME_CHAR_REGEX, attribute_name.lower()):
+            raise InvalidParameterValue(
+                "Message (user) attributes name can only contain upper and lower score characters, digits, periods, hyphens and underscores."
+            )
+        if not re.match(ATTR_NAME_PREFIX_SUFFIX_REGEX, attribute_name.lower()):
+            raise InvalidParameterValue(
+                "You can't use message attribute names beginning with 'AWS.' or 'Amazon.'. "
+                "These strings are reserved for internal use. Additionally, they cannot start or end with '.'."
+            )
+
+        attribute = message_attributes[attribute_name]
+        attribute_type = attribute.get("DataType")
+        attribute_value = attribute.get("StringValue")
+        if not attribute_type:
+            raise InvalidParameterValue("Missing required parameter DataType")
+        if not attribute_value:
+            raise InvalidParameterValue("Missing required parameter StringValue")
+        if not re.match(ATTR_TYPE_REGEX, attribute_type):
+            raise InvalidParameterValue(
+                f"Type for parameter MessageAttributes.Attribute_name.DataType must be prefixed"
+                f'with "String", "Binary", or "Number", but was: {attribute_value}'
+            )
+        if len(attribute_type) >= 256:
+            raise InvalidParameterValue(
+                "Message (user) attribute types must be shorter than 256 Bytes"
+            )
+
+        if attribute_type == "String":
+            try:
+                check_message_content(attribute_value)
+            except InvalidMessageContents as e:
+                # AWS throws a different exception here
+                raise InvalidParameterValue(e.args[0])
+
+
+def check_fifo_id(fifo_id):
+    if not fifo_id:
+        return
+    if len(fifo_id) >= 128:
+        raise InvalidParameterValue(
+            "Message deduplication ID and group ID must be shorter than 128 bytes"
+        )
+    if not re.match(FIFO_MSG_REGEX, fifo_id):
+        raise InvalidParameterValue(
+            "Invalid characters found. Deduplication ID and group ID can only contain"
+            "alphanumeric characters as well as TODO"
+        )
+
+
 class SqsProvider(SqsApi, ServiceLifecycleHook):
     """
     LocalStack SQS Provider.
 
     LIMITATIONS:
-        - Calculation of message attribute MD5 hashes
         - Pagination of results (NextToken)
-        - Sequence numbering
         - Delivery guarantees
-        - FIFO/Standard queue semantics
-        - Message batching
-        - Dead letter queue
     """
 
     queues: Dict[QueueKey, SqsQueue]
@@ -885,14 +937,12 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
     ) -> Message:
         # TODO: default message attributes (SenderId, ApproximateFirstReceiveTimestamp, ...)
 
-        arguments = dict(locals())
-        arguments.pop("self")
-        arguments.pop("context")
-        arguments.pop("queue")
+        check_message_content(message_body)
+        check_attributes(message_attributes)
+        check_attributes(message_system_attributes)
+        check_fifo_id(message_deduplication_id)
+        check_fifo_id(message_group_id)
 
-        check_message_content(arguments)
-
-        default_message_attributes = {"ReceiveCount": 0}
         message: Message = Message(
             MessageId=generate_message_id(),
             MD5OfBody=md5(message_body),
@@ -1217,7 +1267,7 @@ def _create_mock_sequence_number():
 
 
 # Method from moto's attribute_md5 of moto/sqs/models.py, separated from the Message Object
-def _create_message_attribute_hash(message_attributes):
+def _create_message_attribute_hash(message_attributes) -> Optional[str]:
 
     # To avoid the need to check for dict conformity everytime we invoke this function
     if not isinstance(message_attributes, dict):
@@ -1225,7 +1275,6 @@ def _create_message_attribute_hash(message_attributes):
     hash = hashlib.md5()
 
     for attrName in sorted(message_attributes.keys()):
-        MotoMessage.validate_attribute_name(attrName)
         attr_value = message_attributes[attrName]
         # Encode name
         MotoMessage.update_binary_length_and_value(hash, MotoMessage.utf8(attrName))

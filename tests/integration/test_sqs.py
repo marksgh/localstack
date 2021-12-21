@@ -658,17 +658,91 @@ class TestSqsProvider:
         queue_name = f"queue-{short_uid()}"
         queue_url = sqs_create_queue(QueueName=queue_name)
 
+        # base line against to detect general failure
+        valid_attribute = {"attr.1øßä": {"StringValue": "Valida", "DataType": "String"}}
+        sqs_client.send_message(
+            QueueUrl=queue_url, MessageBody="test", MessageAttributes=valid_attribute
+        )
+
+        def send_invalid(attribute):
+            with pytest.raises(Exception) as e:
+                sqs_client.send_message(
+                    QueueUrl=queue_url, MessageBody="test", MessageAttributes=attribute
+                )
+            e.match("Invalid")
+
         # String Attributes must not contain non-printable characters
         # See: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html
         invalid_attribute = {
             "attr1": {"StringValue": f"Invalid-{chr(8)},{chr(11)}", "DataType": "String"}
         }
+        send_invalid(invalid_attribute)
+
+        invalid_name_prefixes = ["aWs.", "AMAZON.", "."]
+        for prefix in invalid_name_prefixes:
+            invalid_attribute = {
+                f"{prefix}-Invalid-attr": {"StringValue": "Valid", "DataType": "String"}
+            }
+            send_invalid(invalid_attribute)
+
+        # Some illegal characters
+        invalid_name_characters = ["!", '"', "§", "(", "?"]
+        for char in invalid_name_characters:
+            invalid_attribute = {
+                f"Invalid-{char}-attr": {"StringValue": "Valid", "DataType": "String"}
+            }
+            send_invalid(invalid_attribute)
+
+        # limit is 256 chars
+        too_long_name = "L" * 257
+        invalid_attribute = {f"{too_long_name}": {"StringValue": "Valid", "DataType": "String"}}
+        send_invalid(invalid_attribute)
+
+        # FIXME: no double periods should be allowed
+        # invalid_attribute = {
+        #     "Invalid..Name": {"StringValue": "Valid", "DataType": "String"}
+        # }
+        # send_invalid(invalid_attribute)
+
+        invalid_type = "Invalid"
+        invalid_attribute = {
+            "Attribute_name": {"StringValue": "Valid", "DataType": f"{invalid_type}"}
+        }
+        send_invalid(invalid_attribute)
+
+        too_long_type = f"Number.{'L'*256}"
+        invalid_attribute = {
+            "Attribute_name": {"StringValue": "Valid", "DataType": f"{too_long_type}"}
+        }
+        send_invalid(invalid_attribute)
+
+        ends_with_dot = "Invalid."
+        invalid_attribute = {f"{ends_with_dot}": {"StringValue": "Valid", "DataType": "String"}}
+        send_invalid(invalid_attribute)
+
+    def test_send_message_with_invalid_fifo_parameters(self, sqs_client, sqs_create_queue):
+        fifo_queue_name = f"queue-{short_uid()}.fifo"
+        queue_url = sqs_create_queue(
+            QueueName=fifo_queue_name,
+            Attributes={"FifoQueue": "true"},
+        )
+        with pytest.raises(Exception) as e:
+            sqs_client.send_message(
+                QueueUrl=queue_url,
+                MessageBody="test",
+                MessageDeduplicationId=f"Invalid-{chr(8)}",
+                MessageGroupId="1",
+            )
+        e.match("InvalidParameterValue")
 
         with pytest.raises(Exception) as e:
             sqs_client.send_message(
-                QueueUrl=queue_url, MessageBody="test", MessageAttributes=invalid_attribute
+                QueueUrl=queue_url,
+                MessageBody="test",
+                MessageDeduplicationId="1",
+                MessageGroupId=f"Invalid-{chr(8)}",
             )
-        e.match("Invalid")
+        e.match("InvalidParameterValue")
 
     def test_send_message_with_invalid_payload_characters(self, sqs_client, sqs_create_queue):
         queue_name = f"queue-{short_uid()}"
@@ -1085,7 +1159,6 @@ class TestSqsProvider:
     def test_invalid_string_attributes_cause_invalid_parameter_value_error(
         self, sqs_client, sqs_create_queue
     ):
-        # TODO: behaviour diverges from AWS
         queue_name = f"queue-{short_uid()}"
         queue_url = sqs_create_queue(QueueName=queue_name)
 
