@@ -596,15 +596,12 @@ def check_attributes(message_attributes: MessageBodyAttributeMap):
 
         attribute = message_attributes[attribute_name]
         attribute_type = attribute.get("DataType")
-        attribute_value = attribute.get("StringValue")
         if not attribute_type:
             raise InvalidParameterValue("Missing required parameter DataType")
-        if not attribute_value:
-            raise InvalidParameterValue("Missing required parameter StringValue")
         if not re.match(ATTR_TYPE_REGEX, attribute_type):
             raise InvalidParameterValue(
                 f"Type for parameter MessageAttributes.Attribute_name.DataType must be prefixed"
-                f'with "String", "Binary", or "Number", but was: {attribute_value}'
+                f'with "String", "Binary", or "Number", but was: {attribute_type}'
             )
         if len(attribute_type) >= 256:
             raise InvalidParameterValue(
@@ -613,6 +610,7 @@ def check_attributes(message_attributes: MessageBodyAttributeMap):
 
         if attribute_type == "String":
             try:
+                attribute_value = attribute.get("StringValue")
                 check_message_content(attribute_value)
             except InvalidMessageContents as e:
                 # AWS throws a different exception here
