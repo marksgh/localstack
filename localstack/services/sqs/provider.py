@@ -296,7 +296,6 @@ class SqsQueue:
             if standard_message not in self.inflight:
                 raise MessageNotInflight()
 
-            # TODO: is the visibility timeout permanently changed?
             standard_message.visibility_timeout = visibility_timeout
 
             if visibility_timeout == 0:

@@ -1142,7 +1142,8 @@ class TestSqsProvider:
             )
         e.match("MissingParameter")
 
-    def test_send_with_delay(self):
+    # TODO: test approximateNumberOfMessages once delayed Messages are properly counted
+    def test_approximate_number_of_messages_delayed(self):
         pass
 
     def test_posting_to_queue_via_queue_name(self, sqs_client, sqs_create_queue):
@@ -1171,6 +1172,24 @@ class TestSqsProvider:
                 QueueUrl=queue_url, MessageBody="test", MessageAttributes=invalid_attribute
             )
         e.match("InvalidParameterValue")
+
+    def test_change_message_visibility_not_permanent(self, sqs_client, sqs_create_queue):
+        queue_name = f"queue-{short_uid()}"
+        queue_url = sqs_create_queue(QueueName=queue_name)
+
+        sqs_client.send_message(QueueUrl=queue_url, MessageBody="test")
+        result_receive = sqs_client.receive_message(QueueUrl=queue_url)
+        receipt_handle = result_receive.get("Messages")[0]["ReceiptHandle"]
+        sqs_client.change_message_visibility(
+            QueueUrl=queue_url, ReceiptHandle=receipt_handle, VisibilityTimeout=0
+        )
+        result_recv_1 = sqs_client.receive_message(QueueUrl=queue_url)
+        result_recv_2 = sqs_client.receive_message(QueueUrl=queue_url)
+        assert (
+            result_recv_1.get("Messages")[0]["MessageId"]
+            == result_receive.get("Messages")[0]["MessageId"]
+        )
+        assert "Messages" not in result_recv_2.keys()
 
     @pytest.mark.skip
     def test_dead_letter_queue_execution_lambda_mapping_preserves_id(
