@@ -449,13 +449,13 @@ class TestSqsProvider:
             i += 1
         assert len(result_recv) == message_count
 
-        ids_sent = []
-        ids_received = []
+        ids_sent = set()
+        ids_received = set()
         for i in range(message_count):
-            ids_sent.append(successful[i]["MessageId"])
-            ids_received.append((result_recv[i]["MessageId"]))
+            ids_sent.add(successful[i]["MessageId"])
+            ids_received.add((result_recv[i]["MessageId"]))
 
-        assert set(ids_sent) == set(ids_received)
+        assert ids_sent == ids_received
 
         delete_entries = [
             {"Id": message["MessageId"], "ReceiptHandle": message["ReceiptHandle"]}

@@ -72,7 +72,7 @@ LOG = logging.getLogger(__name__)
 # https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html
 MSG_CONTENT_REGEX = "^[\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\U00010000-\U0010FFFF]*$"
 
-DEDUPLICATION_INTERVALL_IN_SEC = 5 * 60
+DEDUPLICATION_INTERVAL_IN_SEC = 5 * 60
 
 
 def generate_message_id():
@@ -289,7 +289,7 @@ class SqsQueue:
         with self.mutex:
             if receipt_handle not in self.receipts:
                 raise ReceiptHandleIsInvalid(
-                    'The input receipt handle "INVALID" is not a valid receipt handle.'
+                    f'The input receipt handle "{receipt_handle}" is not a valid receipt handle.'
                 )
             standard_message = self.receipts[receipt_handle]
 
@@ -499,7 +499,7 @@ class FifoQueue(SqsQueue):
         if (
             original_message
             and not original_message.deleted
-            and original_message.priority + DEDUPLICATION_INTERVALL_IN_SEC > qm.priority
+            and original_message.priority + DEDUPLICATION_INTERVAL_IN_SEC > qm.priority
         ):
             message["MessageId"] = original_message.message["MessageId"]
         else:
@@ -1203,9 +1203,7 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
 
     def _require_queue_by_arn(self, dead_letter_target_arn):
         arn_parts = dead_letter_target_arn.split(":")
-        url = "{}/{}/{}".format(
-            get_edge_url(), arn_parts[len(arn_parts) - 2], arn_parts[len(arn_parts) - 1]
-        )
+        url = f"{get_edge_url()}/{arn_parts[-2]}/{arn_parts[-1]}"
         queue = self._require_queue_by_url(url)
         return queue
 
@@ -1217,6 +1215,7 @@ def _create_mock_sequence_number():
 # Method from moto's attribute_md5 of moto/sqs/models.py, separated from the Message Object
 def _create_message_attribute_hash(message_attributes):
 
+    # To avoid the need to check for dict conformity everytime we invoke this function
     if not isinstance(message_attributes, dict):
         return
     hash = hashlib.md5()
